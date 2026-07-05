@@ -7,6 +7,7 @@ import pickle
 import sqlite3
 from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import numpy as np
 from flask import Flask, jsonify, redirect, render_template, request, session, url_for
@@ -15,6 +16,7 @@ BASE_DIR = Path(__file__).resolve().parent
 MODEL_DIR = BASE_DIR / "model"
 DB_PATH = BASE_DIR / "historial.db"
 MAX_REGISTROS = 100
+ZONA_LIMA = ZoneInfo("America/Lima")
 
 app = Flask(
     __name__,
@@ -144,7 +146,7 @@ def predict():
                     nombre,
                     label,
                     info["color"],
-                    datetime.now().strftime("%d/%m/%Y %H:%M"),
+                    datetime.now(ZONA_LIMA).strftime("%d/%m/%Y %H:%M"),
                     json.dumps(probabilidades_dict, ensure_ascii=False),
                 ),
             )
