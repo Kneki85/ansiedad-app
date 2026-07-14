@@ -87,6 +87,19 @@ function renderResult(data) {
     tendenciaTitle.style.display = "none";
     tendenciaEl.innerHTML = "";
   }
+
+  // Si el resultado es riesgo Alto, mostramos la línea de ayuda más visible
+  const helpBanner = document.getElementById("help-banner");
+  if (data.level === "Alto") {
+    helpBanner.innerHTML = `
+      <div class="help-banner">
+        Recuerda: no estás solo/a. La <strong>Línea 113, opción 5 (MINSA)</strong>
+        ofrece apoyo psicológico gratuito las 24 horas, todos los días.
+        Marca <strong>113</strong> desde cualquier operador.
+      </div>`;
+  } else {
+    helpBanner.innerHTML = "";
+  }
 }
 
 function showScreen(name) {
