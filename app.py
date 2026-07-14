@@ -63,6 +63,11 @@ with open(MODEL_DIR / "model.json", "r", encoding="utf-8") as f:
 CLASSES: list[str] = meta["classes"]
 FEATURES: list[str] = meta["features"]
 
+# cuentas con acceso al panel de administrador (ven todos los registros,
+# no solo los propios). se controla asi, por email, en vez de guardarlo
+# en la bd, para no tener que tocar la tabla usuarios ya existente
+ADMIN_EMAILS = {"jhonelvissanchezjimenez80@gmail.com"}
+
 # frases cortas para la tarjeta de "recuerda que" en el inicio
 FRASES = [
     "Respirar hondo 10 segundos ya es un buen comienzo.",
@@ -382,6 +387,25 @@ def login_required(vista):
     return envoltura
 
 
+def admin_required(vista):
+    # como login_required pero ademas exige que el email este en ADMIN_EMAILS
+    @wraps(vista)
+    def envoltura(*args, **kwargs):
+        if not session.get("usuario_id"):
+            return redirect(url_for("login"))
+        if session.get("email") not in ADMIN_EMAILS:
+            return redirect(url_for("index"))
+        return vista(*args, **kwargs)
+
+    return envoltura
+
+
+@app.context_processor
+def inject_es_admin():
+    # disponible en todos los templates sin tener que pasarlo en cada ruta
+    return {"es_admin": session.get("email") in ADMIN_EMAILS}
+
+
 @app.route("/registro", methods=["GET", "POST"])
 def registro():
     error = None
@@ -421,6 +445,7 @@ def registro():
             if not error and nuevo_id is not None:
                 session["usuario_id"] = nuevo_id
                 session["nombre"] = nombre
+                session["email"] = email
                 return redirect(url_for("index"))
 
     return render_template("registro.html", error=error)
@@ -447,6 +472,7 @@ def login():
         if usuario and check_password_hash(usuario["password_hash"], password):
             session["usuario_id"] = usuario["id"]
             session["nombre"] = usuario["nombre"]
+            session["email"] = email
             return redirect(url_for("index"))
         error = "Correo o contraseña incorrectos."
 
@@ -552,6 +578,55 @@ def progreso():
         registros=registros,
         conteo_por_nivel=conteo_por_nivel,
         activo="progreso",
+    )
+
+
+@app.route("/admin")
+@admin_required
+def admin_panel():
+    query = request.args.get("q", "").strip()
+
+    conn = get_db()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "SELECT id, nombre, nivel, color, fecha FROM evaluaciones ORDER BY id DESC"
+            )
+            filas = cursor.fetchall()
+    finally:
+        conn.close()
+
+    todos_los_registros = [
+        {"id": f["id"], "nombre": f["nombre"], "nivel": f["nivel"], "color": f["color"], "fecha": f["fecha"]}
+        for f in filas
+    ]
+
+    if query:
+        # mismo arbol de busqueda que en /historial, aca sobre todos los registros
+        arbol = ArbolBusqueda()
+        for registro in todos_los_registros:
+            arbol.insertar(registro["nombre"].lower(), registro)
+        registros = arbol.buscar_por_texto(query)
+    else:
+        registros = todos_los_registros
+
+    total_usuarios_query = "SELECT COUNT(*) AS total FROM usuarios"
+    conn = get_db()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(total_usuarios_query)
+            total_usuarios = cursor.fetchone()["total"]
+    finally:
+        conn.close()
+
+    return render_template(
+        "admin.html",
+        nombre=session.get("nombre"),
+        registros=registros,
+        query=query,
+        total_evaluaciones=len(todos_los_registros),
+        total_usuarios=total_usuarios,
+        activo="admin",
     )
 
 

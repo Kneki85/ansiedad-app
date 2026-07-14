@@ -1,0 +1,45 @@
+{% extends "_base_dashboard.html" %}
+{% block title %}Admin · AnsioTest{% endblock %}
+{% block page_title %}Panel de administrador{% endblock %}
+{% block page_sub %}<p>Todas las evaluaciones registradas en la app.</p>{% endblock %}
+
+{% block content %}
+
+<div class="stat-row">
+  <div class="stat-card">
+    <div class="stat-num">{{ total_usuarios }}</div>
+    <div class="stat-label">Usuarios registrados</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-num">{{ total_evaluaciones }}</div>
+    <div class="stat-label">Evaluaciones totales</div>
+  </div>
+</div>
+
+<form action="/admin" method="GET" class="name-form" style="margin-bottom: 16px;">
+  <div class="field">
+    <label for="q">Buscar por nombre</label>
+    <input type="text" id="q" name="q" placeholder="Ej: María" value="{{ query or '' }}" />
+  </div>
+  <button type="submit" class="submit-btn">Buscar</button>
+</form>
+
+{% if registros %}
+<div class="timeline">
+  {% for r in registros %}
+  <div class="timeline-row">
+    <span class="timeline-dot" style="background: var(--{{ r.color }});"></span>
+    <span class="timeline-fecha">{{ r.fecha }}</span>
+    <span style="flex:1; font-size:0.85rem; font-weight:600; color:var(--text);">{{ r.nombre }}</span>
+    <span class="timeline-nivel" style="color: var(--{{ r.color }});">{{ r.nivel }}</span>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+  <div class="empty-icon">🗂️</div>
+  <p>No hay evaluaciones{% if query %} para "{{ query }}"{% endif %}.</p>
+</div>
+{% endif %}
+
+{% endblock %}
