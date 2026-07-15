@@ -31,7 +31,7 @@
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button type="submit" class="clear-btn">↩ Deshacer última</button>
     </form>
-    <form action="/historial/limpiar" method="POST" onsubmit="return confirm('¿Limpiar todo tu historial?')">
+    <form action="/historial/limpiar" method="POST" id="form-limpiar" onsubmit="return mostrarModalLimpiar(event)">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button type="submit" class="clear-btn">Limpiar historial</button>
     </form>
@@ -90,4 +90,31 @@
 </div>
 {% endif %}
 
+<div id="modal-limpiar" style="display:none; position:fixed; inset:0; background:rgba(31,42,68,0.35); align-items:center; justify-content:center; z-index:50; padding:20px;">
+  <div style="background:var(--surface); border-radius:var(--radius); border:1px solid var(--border); padding:22px 22px 18px; max-width:320px; width:100%;">
+    <p style="font-family:'Fraunces','Inter',serif; font-size:1.05rem; color:var(--text); margin:0 0 8px; font-weight:600;">Limpiar historial</p>
+    <p style="font-size:0.85rem; color:var(--muted); margin:0 0 18px; line-height:1.5;">Esta acción no se puede deshacer. Se van a borrar todos tus registros.</p>
+    <div style="display:flex; gap:8px; justify-content:flex-end;">
+      <button type="button" onclick="cerrarModalLimpiar()" style="font-size:0.82rem; padding:8px 16px; border:1px solid var(--border); background:var(--surface); color:var(--text); border-radius:10px; cursor:pointer;">Cancelar</button>
+      <button type="button" onclick="confirmarLimpiar()" style="font-size:0.82rem; padding:8px 16px; border:none; background:var(--red); color:#fceaea; border-radius:10px; font-weight:500; cursor:pointer;">Limpiar</button>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function mostrarModalLimpiar(e) {
+  e.preventDefault();
+  document.getElementById("modal-limpiar").style.display = "flex";
+  return false;
+}
+function cerrarModalLimpiar() {
+  document.getElementById("modal-limpiar").style.display = "none";
+}
+function confirmarLimpiar() {
+  document.getElementById("form-limpiar").submit();
+}
+</script>
 {% endblock %}
