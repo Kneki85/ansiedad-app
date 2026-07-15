@@ -910,11 +910,14 @@ def ver_historial():
     ]
 
     if query:
-        # buscador con arbol: meto cada registro por nombre y despues
-        # recorro el arbol en orden buscando coincidencias
+        # buscador con arbol: en /historial cada usuario ya ve solo SUS
+        # propios registros, asi que buscar por nombre no serviria de nada
+        # (todos tendrian el mismo nombre). Por eso la clave es nivel+fecha,
+        # para poder filtrar por ejemplo "alto" o una fecha/mes.
         arbol = ArbolBusqueda()
         for registro in todos_los_registros:
-            arbol.insertar(registro["nombre"].lower(), registro)
+            clave = f"{registro['nivel'].lower()} {registro['fecha'].lower()}"
+            arbol.insertar(clave, registro)
         registros = arbol.buscar_por_texto(query)
 
         # guardo la busqueda en la cola de "recientes"
