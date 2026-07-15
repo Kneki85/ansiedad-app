@@ -3,6 +3,23 @@ NOVEDAD: LOGIN
 Ahora la app pide iniciar sesión. La primera vez, entra a /registro y crea tu
 cuenta (nombre, correo, contraseña). Las veces siguientes usa /login.
 
+NOVEDAD: RECUPERAR CONTRASEÑA Y SEGURIDAD
+
+Se agregó "¿Olvidaste tu contraseña?" en /login, que manda un correo con un
+link para poner una contraseña nueva (válido 30 minutos). Para que funcione
+necesitas 2 variables de entorno nuevas en tu ".env" (y en Render):
+
+  MAIL_USER      -> tu cuenta de Gmail
+  MAIL_PASSWORD  -> una "contraseña de aplicación" (NO tu clave normal),
+                    la generas en myaccount.google.com/apppasswords
+                    (requiere tener activada la verificación en 2 pasos)
+
+También se agregó SECRET_KEY como variable de entorno propia (antes estaba
+fija en el código). Ver ".env.example" para el detalle de las dos.
+
+Si no configuras MAIL_USER/MAIL_PASSWORD la app sigue funcionando igual,
+simplemente el correo de recuperación no se envía (avisa en la consola).
+
 CONFIGURAR LA BASE DE DATOS (MySQL) — SOLO LA PRIMERA VEZ
 
 1. Copia el archivo ".env.example" y renómbralo a ".env"

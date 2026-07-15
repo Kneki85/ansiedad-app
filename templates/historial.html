@@ -25,12 +25,14 @@
 
 {% if registros %}
 <div class="historial-meta">
-  <span>{{ registros | length }} registro{% if registros | length != 1 %}s{% endif %}{% if query %} para "{{ query }}"{% endif %}</span>
+  <span>{{ total_registros }} registro{% if total_registros != 1 %}s{% endif %}{% if query %} para "{{ query }}"{% endif %}</span>
   <div style="display:flex; gap:10px;">
     <form action="/historial/deshacer" method="POST">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button type="submit" class="clear-btn">↩ Deshacer última</button>
     </form>
     <form action="/historial/limpiar" method="POST" onsubmit="return confirm('¿Limpiar todo tu historial?')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button type="submit" class="clear-btn">Limpiar historial</button>
     </form>
   </div>
@@ -58,6 +60,18 @@
   </a>
   {% endfor %}
 </div>
+
+{% if total_paginas > 1 %}
+<div class="footer-link" style="display:flex; justify-content:center; align-items:center; gap:14px; margin-top:16px;">
+  {% if pagina > 1 %}
+  <a href="/historial?page={{ pagina - 1 }}{% if query %}&q={{ query }}{% endif %}">← Anterior</a>
+  {% endif %}
+  <span>Página {{ pagina }} de {{ total_paginas }}</span>
+  {% if pagina < total_paginas %}
+  <a href="/historial?page={{ pagina + 1 }}{% if query %}&q={{ query }}{% endif %}">Siguiente →</a>
+  {% endif %}
+</div>
+{% endif %}
 
 {% else %}
 <div class="empty-state">

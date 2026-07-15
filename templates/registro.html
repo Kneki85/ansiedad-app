@@ -23,6 +23,7 @@
     <div class="section-label">Registro</div>
 
     <form action="/registro" method="POST" class="name-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="field">
         <label for="nombre">Nombre</label>
         <input type="text" id="nombre" name="nombre" placeholder="Ej: María García" maxlength="80" required autofocus />

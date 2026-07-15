@@ -6,7 +6,10 @@ import json
 import os
 import pickle
 import random
+import secrets
+import smtplib
 from datetime import datetime
+from email.message import EmailMessage
 from functools import wraps
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -15,6 +18,7 @@ import numpy as np
 import pymysql
 import pymysql.cursors
 from flask import Flask, jsonify, redirect, render_template, request, session, url_for
+from flask_wtf import CSRFProtect
 from werkzeug.security import check_password_hash, generate_password_hash
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -46,12 +50,27 @@ DB_NAME = os.environ.get("DB_NAME", "ansiedad_app")
 # al probar con un MySQL local que no lo exige), se conecta sin SSL.
 DB_SSL_CA = os.environ.get("DB_SSL_CA", "")
 
+# Correo para "recuperar contraseña", vía Gmail SMTP. Igual que con la BD,
+# las credenciales van solo en variables de entorno (nunca en el código).
+# En Gmail, MAIL_PASSWORD tiene que ser una "contraseña de aplicación"
+# (no la contraseña normal de la cuenta): myaccount.google.com/apppasswords
+MAIL_HOST = os.environ.get("MAIL_HOST", "smtp.gmail.com")
+MAIL_PORT = int(os.environ.get("MAIL_PORT", "465"))
+MAIL_USER = os.environ.get("MAIL_USER", "")
+MAIL_PASSWORD = os.environ.get("MAIL_PASSWORD", "")
+RESET_TOKEN_MINUTOS = 30
+
 app = Flask(
     __name__,
     template_folder=str(BASE_DIR / "templates"),
     static_folder=str(BASE_DIR / "static"),
 )
-app.secret_key = os.environ.get("SECRET_KEY", "ansiedad_app_secret_key_2024")
+app.secret_key = os.environ.get("SECRET_KEY") or os.urandom(32).hex()
+if not os.environ.get("SECRET_KEY"):
+    print("[aviso] SECRET_KEY no está en las variables de entorno; se generó una temporal "
+          "(las sesiones se invalidan en cada reinicio). Configúrala en Render.")
+
+csrf = CSRFProtect(app)
 
 # Carga del modelo y metadatos
 with open(MODEL_DIR / "model.pkl", "rb") as f:
@@ -135,6 +154,17 @@ def init_db() -> None:
                     fecha_registro VARCHAR(20) NOT NULL
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
             """)
+            # columnas para "recuperar contraseña"; en un ALTER TABLE aparte
+            # porque si el usuario ya tenia la tabla creada de antes, el
+            # CREATE TABLE IF NOT EXISTS de arriba no la iba a actualizar.
+            for columna_sql in (
+                "ALTER TABLE usuarios ADD COLUMN reset_token VARCHAR(120) NULL",
+                "ALTER TABLE usuarios ADD COLUMN reset_expira BIGINT NULL",
+            ):
+                try:
+                    cursor.execute(columna_sql)
+                except pymysql.err.OperationalError:
+                    pass  # la columna ya existe, no hay nada que hacer
         conn.commit()
     finally:
         conn.close()
@@ -416,8 +446,8 @@ def registro():
 
         if not nombre or not email or not password:
             error = "Completa todos los campos."
-        elif len(password) < 4:
-            error = "La contraseña debe tener al menos 4 caracteres."
+        elif len(password) < 8:
+            error = "La contraseña debe tener al menos 8 caracteres."
         else:
             conn = get_db()
             nuevo_id = None
@@ -449,6 +479,35 @@ def registro():
                 return redirect(url_for("index"))
 
     return render_template("registro.html", error=error)
+
+
+def enviar_correo_reset(destinatario: str, link: str) -> bool:
+    """Manda el correo con el link para restablecer la contraseña.
+    Devuelve False (sin reventar la app) si no está configurado el correo
+    o si Gmail rechaza el envío, para que el flujo no se caiga."""
+    if not MAIL_USER or not MAIL_PASSWORD:
+        print("[aviso] MAIL_USER/MAIL_PASSWORD no configurados; no se envió el correo de recuperación.")
+        return False
+
+    msg = EmailMessage()
+    msg["Subject"] = "Recupera tu contraseña — AnsioTest"
+    msg["From"] = MAIL_USER
+    msg["To"] = destinatario
+    msg.set_content(
+        "Hola,\n\n"
+        "Recibimos una solicitud para restablecer tu contraseña en AnsioTest.\n"
+        f"Este enlace es válido por {RESET_TOKEN_MINUTOS} minutos:\n\n"
+        f"{link}\n\n"
+        "Si no fuiste tú, simplemente ignora este correo."
+    )
+    try:
+        with smtplib.SMTP_SSL(MAIL_HOST, MAIL_PORT) as smtp:
+            smtp.login(MAIL_USER, MAIL_PASSWORD)
+            smtp.send_message(msg)
+        return True
+    except Exception as e:
+        print(f"[error] No se pudo enviar el correo de recuperación: {e}")
+        return False
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -483,6 +542,80 @@ def login():
 def logout():
     session.clear()
     return redirect(url_for("login"))
+
+
+@app.route("/olvide-password", methods=["GET", "POST"])
+def olvide_password():
+    mensaje = None
+    if request.method == "POST":
+        email = request.form.get("email", "").strip().lower()
+
+        conn = get_db()
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute("SELECT id FROM usuarios WHERE email = %s", (email,))
+                usuario = cursor.fetchone()
+                if usuario:
+                    token = secrets.token_urlsafe(32)
+                    expira = int(datetime.now(ZONA_LIMA).timestamp()) + RESET_TOKEN_MINUTOS * 60
+                    cursor.execute(
+                        "UPDATE usuarios SET reset_token = %s, reset_expira = %s WHERE id = %s",
+                        (token, expira, usuario["id"]),
+                    )
+                    conn.commit()
+                    link = url_for("reset_password", token=token, _external=True)
+                    enviar_correo_reset(email, link)
+        finally:
+            conn.close()
+
+        # el mismo mensaje exista o no la cuenta, para no revelar por esta vía
+        # qué correos están registrados
+        mensaje = "Si ese correo está registrado, te mandamos un link para restablecer tu contraseña."
+
+    return render_template("olvide_password.html", mensaje=mensaje)
+
+
+@app.route("/reset-password/<token>", methods=["GET", "POST"])
+def reset_password(token):
+    conn = get_db()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "SELECT id, reset_expira FROM usuarios WHERE reset_token = %s", (token,)
+            )
+            usuario = cursor.fetchone()
+    finally:
+        conn.close()
+
+    ahora = int(datetime.now(ZONA_LIMA).timestamp())
+    token_valido = usuario and usuario["reset_expira"] and ahora <= usuario["reset_expira"]
+
+    if not token_valido:
+        return render_template("reset_password.html", token_valido=False, error=None)
+
+    error = None
+    if request.method == "POST":
+        password = request.form.get("password", "")
+        confirmar = request.form.get("confirmar", "")
+        if len(password) < 8:
+            error = "La contraseña debe tener al menos 8 caracteres."
+        elif password != confirmar:
+            error = "Las contraseñas no coinciden."
+        else:
+            conn = get_db()
+            try:
+                with conn.cursor() as cursor:
+                    cursor.execute(
+                        "UPDATE usuarios SET password_hash = %s, reset_token = NULL, reset_expira = NULL "
+                        "WHERE id = %s",
+                        (generate_password_hash(password), usuario["id"]),
+                    )
+                conn.commit()
+            finally:
+                conn.close()
+            return redirect(url_for("login"))
+
+    return render_template("reset_password.html", token_valido=True, error=error)
 
 
 @app.route("/")
@@ -572,10 +705,32 @@ def progreso():
         color = RISK_INFO[nivel]["color"]
         conteo_por_nivel.append((nivel, cantidad, color))
 
+    # puntos del grafico de evolucion: orden cronologico (mas viejo primero),
+    # el nivel de riesgo se pasa a un numero (indice en CLASSES) para poder
+    # ubicarlo en el eje Y. lo calculo aca en vez de en el template porque
+    # con jinja las cuentas de coordenadas se vuelven ilegibles.
+    serie = list(reversed(registros))
+    puntos_grafico = []
+    if len(serie) >= 2:
+        max_valor = len(CLASSES) - 1
+        n = len(serie)
+        for i, r in enumerate(serie):
+            valor = CLASSES.index(r["nivel"])
+            x = 10 + (i / (n - 1)) * 580
+            y = 170 - (valor / max_valor) * 150 if max_valor else 95
+            puntos_grafico.append({
+                "x": round(x, 1),
+                "y": round(y, 1),
+                "color": r["color"],
+                "nivel": r["nivel"],
+                "fecha": r["fecha"],
+            })
+
     return render_template(
         "progreso.html",
         nombre=nombre_usuario,
         registros=registros,
+        puntos_grafico=puntos_grafico,
         conteo_por_nivel=conteo_por_nivel,
         activo="progreso",
     )
@@ -772,13 +927,29 @@ def ver_historial():
 
     busquedas_recientes = list(reversed(session.get("busquedas_recientes", [])))
 
+    # paginacion: 10 registros por pagina, sobre la lista ya filtrada
+    # (si hay busqueda, pagina los resultados de la busqueda)
+    POR_PAGINA = 10
+    try:
+        pagina = int(request.args.get("page", 1))
+    except ValueError:
+        pagina = 1
+    total_registros = len(registros)
+    total_paginas = max(1, (total_registros + POR_PAGINA - 1) // POR_PAGINA)
+    pagina = min(max(pagina, 1), total_paginas)
+    inicio = (pagina - 1) * POR_PAGINA
+    registros_pagina = registros[inicio:inicio + POR_PAGINA]
+
     return render_template(
         "historial.html",
-        registros=registros,
+        registros=registros_pagina,
         query=query,
         busquedas_recientes=busquedas_recientes,
         nombre=nombre_usuario,
         activo="resultados",
+        pagina=pagina,
+        total_paginas=total_paginas,
+        total_registros=total_registros,
     )
 
 

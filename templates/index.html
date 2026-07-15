@@ -22,6 +22,7 @@
 <div class="section-card" style="margin-bottom:16px;">
   <div class="section-label" style="margin-bottom:10px;">¿Cómo te sientes hoy?</div>
   <form action="/animo" method="POST" class="mood-row">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     {% for valor, etiqueta, color in estados_animo %}
     <button type="submit" name="estado" value="{{ valor }}" class="mood-option {{ 'selected' if animo_hoy == valor else '' }}">
       <span class="mood-dot" style="background: {{ color }};"></span>

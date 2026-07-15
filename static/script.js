@@ -23,9 +23,10 @@ async function submitForm() {
   errEl.style.display = "none";
 
   try {
+    const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
     const res = await fetch("/predict", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-CSRFToken": csrfToken },
       body: JSON.stringify(getFormData()),
     });
 

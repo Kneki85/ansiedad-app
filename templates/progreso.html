@@ -14,6 +14,25 @@
   {% endfor %}
 </div>
 
+{% if puntos_grafico %}
+<div class="section-card" style="margin-bottom:16px;">
+  <div class="section-label" style="margin-bottom:8px;">Evolución</div>
+  <svg viewBox="0 0 600 190" style="width:100%; height:auto;">
+    <line x1="10" y1="20" x2="10" y2="170" stroke="var(--muted)" stroke-width="1" opacity="0.3"/>
+    <line x1="10" y1="170" x2="590" y2="170" stroke="var(--muted)" stroke-width="1" opacity="0.3"/>
+    <polyline
+      points="{% for p in puntos_grafico %}{{ p.x }},{{ p.y }} {% endfor %}"
+      fill="none" stroke="var(--accent)" stroke-width="2" />
+    {% for p in puntos_grafico %}
+    <circle cx="{{ p.x }}" cy="{{ p.y }}" r="4" fill="var(--{{ p.color }})">
+      <title>{{ p.nivel }} — {{ p.fecha }}</title>
+    </circle>
+    {% endfor %}
+  </svg>
+  <p style="font-size:0.78rem; color:var(--muted); margin-top:4px;">De tu evaluación más antigua (izquierda) a la más reciente (derecha). Pasa el cursor sobre un punto para ver la fecha.</p>
+</div>
+{% endif %}
+
 {% if registros %}
 <div class="section-card" style="margin-bottom:16px;">
   <div class="section-label" style="margin-bottom:8px;">Total evaluado</div>
