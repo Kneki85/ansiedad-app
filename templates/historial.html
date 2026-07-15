@@ -38,6 +38,11 @@
   </div>
 </div>
 
+{% if nada_que_deshacer %}
+<p style="font-size:0.8rem; color:var(--muted); margin:-6px 0 14px;">No hay ninguna evaluación reciente para deshacer.</p>
+{% endif %}
+
+
 <div class="historial-list">
   {% for r in registros %}
   <a href="/historial/detalle/{{ r.id }}" class="historial-card" style="text-decoration:none; color:inherit; display:block;">
